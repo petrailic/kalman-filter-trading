@@ -1,6 +1,7 @@
 # Simple Pair Trading Strategy with Kalman Filter
 
 import kalmanFilter as kf
+import bollingerBands as bb
 import matplotlib.pyplot as plt
 
 def plot_pair_prices(dataA, dataB):
@@ -29,14 +30,62 @@ def simple_kalman_filtered_pair_trading(dataA, dataB, Q=0.1, R=0.1, shares=100, 
     filtered_ratio = k.run()
     sharesA = shares
     sharesB = shares
-    f = factor
+
+    process_costs = 0
 
     # Adjust amount of shares based on observed and filtered ratio difference
     for d in range(1, len(dataA)):
         delta = (filtered_ratio[d] - ratio.iloc[d])
-        sharesA += delta * f
-        sharesB += -1 * delta * f
+        sharesA += delta * factor
+        sharesB += -1 * delta * factor
+
+        # tracking costs of buying/selling stocks
+        process_costs += delta * factor * dataA.iloc[d]
+        process_costs += -1 * delta * factor * dataB.iloc[d]
 
     init_holdings = dataA.iloc[0] * shares + dataB.iloc[0] * shares
     fin_holdings = dataA.iloc[-1] * sharesA + dataB.iloc[-1] * sharesB
-    return fin_holdings/ init_holdings
+
+    return (fin_holdings - process_costs)/ init_holdings
+
+def simple_bollinger_bands_pair_trading(dataA, dataB, shares=100, factor=10):
+    '''
+   Simulates a pair trading strategy using Bollinger bands that
+   adjusts the number of shares held in each company based on the upper
+   and lower bollinger band bounds
+   :param dataA: array of observed stock price data for company A
+   :param dataB: array of observed stock price data for company B
+   :param shares: float of initial amount of shares held in each company
+   :param factor: float of scaling factor for the share amount adjustment
+   :return: float of profit percentage
+   '''
+    ratio = dataA / dataB
+    sma, upper_band, lower_band = bb.bollinger_bands(ratio)
+    sharesA = shares
+    sharesB = shares
+
+    process_costs = 0
+
+    for i in range(20, len(ratio)):
+        if ratio.iloc[i] > upper_band[i]:
+            delta = ratio.iloc[i] - upper_band[i]
+            sharesA += -1 * delta * factor
+            sharesB += delta * factor
+
+            # tracking costs of buying/selling stocks
+            process_costs +=  -1 * delta * factor * dataA.iloc[i]
+            process_costs += delta * factor * dataB.iloc[i]
+
+        if ratio.iloc[i] < lower_band[i]:
+            delta = lower_band[i] - ratio.iloc[i]
+            sharesA += delta * factor
+            sharesB += -1 * delta * factor
+
+            # tracking costs of buying/selling stocks
+            process_costs += delta * factor * dataA.iloc[i]
+            process_costs += -1 * delta * factor * dataB.iloc[i]
+
+    init_holdings = dataA.iloc[0] * shares + dataB.iloc[0] * shares
+    fin_holdings = dataA.iloc[-1] * sharesA + dataB.iloc[-1] * sharesB
+
+    return (fin_holdings - process_costs)/ init_holdings
